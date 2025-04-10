@@ -1,0 +1,31 @@
+function wait_for_pipeline() {
+    local project_id="$1"
+    local mr_iid="$2"
+
+    echo "Warte auf Pipeline-Abschluss für Merge Request $mr_iid im Projekt $project_id..."
+
+    pipeline_id=$(curl --silent --header "PRIVATE-TOKEN: ${PRIVATE_TOKEN}" \
+        "${GITLAB_API_URL}/projects/${project_id}/merge_requests/${mr_iid}/pipelines" | jq -r '.[0].id')
+
+    if [ "$pipeline_id" == "null" ]; then
+        echo "Keine Pipeline gefunden."
+        return 1
+    fi
+
+    # Warten, bis die Pipeline abgeschlossen ist
+    while true; do
+        pipeline_status=$(curl --silent --header "PRIVATE-TOKEN: ${PRIVATE_TOKEN}" \
+            "${GITLAB_API_URL}/projects/${project_id}/pipelines/${pipeline_id}" | jq -r '.status')
+
+        if [ "$pipeline_status" == "success" ]; then
+            echo "Pipeline erfolgreich abgeschlossen."
+            return 0
+        elif [ "$pipeline_status" == "failed" ] || [ "$pipeline_status" == "canceled" ]; then
+            echo "Pipeline fehlgeschlagen oder abgebrochen."
+            return 1
+        fi
+
+        echo "Pipeline läuft noch, warte 10 Sekunden..."
+        sleep 10
+    done
+}
